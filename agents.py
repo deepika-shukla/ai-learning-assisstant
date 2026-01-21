@@ -45,9 +45,11 @@ def router_agent(state: LearningState) -> dict:
     """
     Central router that classifies user intent using LLM.
     Handles typos, variations, and natural language.
-    """
-    llm = get_llm(temperature=0)
     
+    INTERVIEW TIP: We use a two-tier approach:
+    1. Quick keyword matching for common commands (fast, no API call)
+    2. LLM classification for complex/ambiguous inputs (smart, uses API)
+    """
     # Get last user message
     messages = state.get("messages", [])
     if not messages:
@@ -58,6 +60,71 @@ def router_agent(state: LearningState) -> dict:
         user_input = last_message.content
     else:
         user_input = str(last_message)
+    
+    user_lower = user_input.lower().strip()
+    
+    # ===== TIER 1: Quick keyword matching (no LLM needed) =====
+    # INTERVIEW TIP: This saves API costs and reduces latency for common commands
+    quick_match = {
+        # Todos variations
+        "todos": "show_todos",
+        "todo": "show_todos",
+        "tasks": "show_todos",
+        "show todos": "show_todos",
+        "show tasks": "show_todos",
+        "my todos": "show_todos",
+        "what to do": "show_todos",
+        
+        # Progress variations  
+        "progress": "show_progress",
+        "show progress": "show_progress",
+        "my progress": "show_progress",
+        "stats": "show_progress",
+        
+        # Quiz variations
+        "quiz": "take_quiz",
+        "quiz me": "take_quiz",
+        "test me": "take_quiz",
+        "take quiz": "take_quiz",
+        
+        # Resources variations
+        "resources": "get_resources",
+        "get resources": "get_resources",
+        "videos": "get_resources",
+        "tutorials": "get_resources",
+        
+        # Complete variations
+        "done": "mark_complete",
+        "complete": "mark_complete",
+        "finished": "mark_complete",
+        "mark done": "mark_complete",
+        "mark complete": "mark_complete",
+        
+        # Analytics variations
+        "analytics": "show_analytics",
+        "show analytics": "show_analytics",
+        "statistics": "show_analytics",
+        
+        # Confirm variations
+        "yes": "confirm_curriculum",
+        "confirm": "confirm_curriculum",
+        "approve": "confirm_curriculum",
+        "looks good": "confirm_curriculum",
+        "let's start": "confirm_curriculum",
+        "lets start": "confirm_curriculum",
+    }
+    
+    # Check for exact or partial match
+    if user_lower in quick_match:
+        return {"next_action": quick_match[user_lower]}
+    
+    # Check if input starts with a quick command
+    for keyword, action in quick_match.items():
+        if user_lower.startswith(keyword) or keyword.startswith(user_lower):
+            return {"next_action": action}
+    
+    # ===== TIER 2: LLM classification for complex inputs =====
+    llm = get_llm(temperature=0)
     
     # Classification prompt
     system_prompt = """You are an intent classifier for an AI Learning Assistant.
