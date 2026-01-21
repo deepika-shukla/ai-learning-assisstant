@@ -51,25 +51,28 @@ def route_to_agent(state: LearningState) -> str:
     """
     Routes to appropriate agent based on next_action.
     This is the conditional edge function.
+    
+    INTERVIEW TIP: Node names must NOT match state keys in LangGraph v0.2+
+    That's why we use "_node" suffix (e.g., "todos_node" not "todos")
     """
     action = state.get("next_action", "unknown")
     
-    # Map actions to node names
+    # Map actions to node names (with _node suffix to avoid state key conflicts)
     action_map = {
-        "create_curriculum": "curriculum",
-        "confirm_curriculum": "confirm",
-        "show_todos": "todos",
-        "mark_complete": "complete",
-        "show_progress": "progress",
-        "ask_question": "qa",
-        "take_quiz": "quiz",
-        "check_quiz": "grader",
-        "get_resources": "resources",
-        "show_analytics": "analytics",
-        "unknown": "unknown"
+        "create_curriculum": "curriculum_node",
+        "confirm_curriculum": "confirm_node",
+        "show_todos": "todos_node",
+        "mark_complete": "complete_node",
+        "show_progress": "progress_node",
+        "ask_question": "qa_node",
+        "take_quiz": "quiz_node",
+        "check_quiz": "grader_node",
+        "get_resources": "resources_node",
+        "show_analytics": "analytics_node",
+        "unknown": "unknown_node"
     }
     
-    return action_map.get(action, "unknown")
+    return action_map.get(action, "unknown_node")
 
 
 def should_continue(state: LearningState) -> Literal["router", "__end__"]:
@@ -110,47 +113,36 @@ def build_graph(checkpointer=None) -> StateGraph:
     workflow = StateGraph(LearningState)
     
     # ========== Add Nodes ==========
-    workflow.add_node("router", router_agent)
-    workflow.add_node("curriculum", curriculum_agent)
-    workflow.add_node("confirm", confirm_curriculum_agent)
-    workflow.add_node("todos", todo_agent)
-    workflow.add_node("complete", complete_day_agent)
-    workflow.add_node("progress", progress_agent)
-    workflow.add_node("qa", qa_agent)
-    workflow.add_node("quiz", quiz_agent)
-    workflow.add_node("grader", quiz_grader_agent)
-    workflow.add_node("resources", resources_agent)
-    workflow.add_node("analytics", analytics_agent)
-    workflow.add_node("unknown", unknown_agent)
+    # INTERVIEW TIP: Node names use "_node" suffix to avoid conflicts with state keys
+    # LangGraph v0.2+ doesn't allow node names that match TypedDict keys
+    workflow.add_node("router_node", router_agent)
+    workflow.add_node("curriculum_node", curriculum_agent)
+    workflow.add_node("confirm_node", confirm_curriculum_agent)
+    workflow.add_node("todos_node", todo_agent)
+    workflow.add_node("complete_node", complete_day_agent)
+    workflow.add_node("progress_node", progress_agent)
+    workflow.add_node("qa_node", qa_agent)
+    workflow.add_node("quiz_node", quiz_agent)
+    workflow.add_node("grader_node", quiz_grader_agent)
+    workflow.add_node("resources_node", resources_agent)
+    workflow.add_node("analytics_node", analytics_agent)
+    workflow.add_node("unknown_node", unknown_agent)
     
     # ========== Add Edges ==========
     
     # Entry point: START → router
-    workflow.add_edge(START, "router")
+    workflow.add_edge(START, "router_node")
     
     # Router → conditional routing to appropriate agent
     workflow.add_conditional_edges(
-        "router",
-        route_to_agent,
-        {
-            "curriculum": "curriculum",
-            "confirm": "confirm",
-            "todos": "todos",
-            "complete": "complete",
-            "progress": "progress",
-            "qa": "qa",
-            "quiz": "quiz",
-            "grader": "grader",
-            "resources": "resources",
-            "analytics": "analytics",
-            "unknown": "unknown"
-        }
+        "router_node",
+        route_to_agent
     )
     
     # All agents → END (wait for next user input)
-    for node in ["curriculum", "confirm", "todos", "complete", 
-                 "progress", "qa", "quiz", "grader", "resources", 
-                 "analytics", "unknown"]:
+    for node in ["curriculum_node", "confirm_node", "todos_node", "complete_node", 
+                 "progress_node", "qa_node", "quiz_node", "grader_node", "resources_node", 
+                 "analytics_node", "unknown_node"]:
         workflow.add_edge(node, END)
     
     # ========== Compile ==========
