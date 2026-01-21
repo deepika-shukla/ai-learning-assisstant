@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # FastAPI Backend
+  # ============================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: learning-assistant-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - DATABASE_URL=/app/data/learning.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # Streamlit GUI
+  # ============================================================
+  gui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: learning-assistant-gui
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ============================================================
+  # CLI Interface (interactive)
+  # ============================================================
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: learning-assistant-cli
+    command: python -m main
+    stdin_open: true
+    tty: true
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./data:/app/data
+    profiles:
+      - cli  # Only start with: docker-compose --profile cli up cli
+
+volumes:
+  data:
