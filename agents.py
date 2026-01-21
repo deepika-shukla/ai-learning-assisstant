@@ -202,19 +202,36 @@ def curriculum_agent(state: LearningState) -> dict:
     """
     Creates a personalized multi-day learning curriculum.
     Considers skill level and duration.
+    
+    INTERVIEW TIP: We extract duration from natural language using regex.
+    "teach me Python for 3 days" → duration = 3
     """
+    import re
+    
     llm = get_llm(temperature=0.8)
     
     # Extract topic from message if not in state
     topic = state.get("topic", "")
-    if not topic:
-        messages = state.get("messages", [])
-        if messages:
-            last_msg = messages[-1]
-            content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-            topic = content
+    messages = state.get("messages", [])
+    user_message = ""
     
-    duration = state.get("duration_days", 7)
+    if messages:
+        last_msg = messages[-1]
+        user_message = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+        if not topic:
+            topic = user_message
+    
+    # Extract duration from user message (e.g., "3 days", "5 day", "in 10 days")
+    duration = state.get("duration_days", 7)  # Default to 7
+    
+    # INTERVIEW TIP: Regex pattern to find "N days" or "N day" in message
+    duration_match = re.search(r'(\d+)\s*(?:days?|day)', user_message.lower())
+    if duration_match:
+        extracted_duration = int(duration_match.group(1))
+        # Sanity check: keep between 1-30 days
+        if 1 <= extracted_duration <= 30:
+            duration = extracted_duration
+    
     level = state.get("skill_level", "beginner")
     
     system_prompt = f"""You are an expert curriculum designer. Create a {duration}-day learning plan.
