@@ -27,11 +27,13 @@ try:
     from .services.youtube_service import YouTubeService
     from .services.wikipedia_service import WikipediaService
     from .services.github_service import GitHubService
+    from .services.web_search_service import WebSearchService
 except ImportError:
     from state import LearningState, DayPlan, QuizQuestion, VALID_ACTIONS
     from services.youtube_service import YouTubeService
     from services.wikipedia_service import WikipediaService
     from services.github_service import GitHubService
+    from services.web_search_service import WebSearchService
 
 load_dotenv()
 
@@ -1009,9 +1011,10 @@ def resources_agent(state: LearningState) -> dict:
     want_youtube = any(word in last_msg for word in ["youtube", "video", "videos", "watch"])
     want_wikipedia = any(word in last_msg for word in ["wikipedia", "wiki", "summary", "what is", "explain"])
     want_github = any(word in last_msg for word in ["github", "repo", "repos", "repository", "code", "project"])
+    want_web = any(word in last_msg for word in ["search", "web", "google", "find", "look up", "articles"])
     
     # If none specified or user says "resources", get all
-    want_all = "resources" in last_msg or (not want_youtube and not want_wikipedia and not want_github)
+    want_all = "resources" in last_msg or (not want_youtube and not want_wikipedia and not want_github and not want_web)
     
     # Try to extract topic from user's last message
     user_topic = None
@@ -1052,6 +1055,8 @@ def resources_agent(state: LearningState) -> dict:
             thinking_items.append("Searching Wikipedia...")
         if want_github:
             thinking_items.append("Finding GitHub repos...")
+        if want_web:
+            thinking_items.append("Searching the web...")
     
     show_thinking(thinking_items)
     
@@ -1059,6 +1064,7 @@ def resources_agent(state: LearningState) -> dict:
     youtube = YouTubeService()
     wikipedia = WikipediaService()
     github = GitHubService()
+    web_search = WebSearchService()
     
     # Improve Wikipedia search by adding context for ambiguous terms
     wiki_query = search_query
@@ -1082,6 +1088,7 @@ def resources_agent(state: LearningState) -> dict:
     videos = []
     wiki = {"summary": "", "url": ""}
     repos = []
+    web_results = []
     
     try:
         loop = asyncio.new_event_loop()
@@ -1096,6 +1103,11 @@ def resources_agent(state: LearningState) -> dict:
             repos = loop.run_until_complete(github.search_repositories(search_query + " tutorial", max_results=3))
         
         loop.close()
+        
+        # Web search (synchronous)
+        if want_web or want_all:
+            web_results = web_search.search(f"{search_query} tutorial guide", max_results=3)
+            
     except Exception as e:
         print(f"Resource fetch error: {e}")
     
@@ -1117,6 +1129,20 @@ def resources_agent(state: LearningState) -> dict:
         wiki_summary = wiki.get('summary', 'No summary available')[:300]
         wiki_url = wiki.get('url', 'https://wikipedia.org')
         response += f"\n📖 **Wikipedia Summary:**\n{wiki_summary}...\n\n🔗 [Read more on Wikipedia]({wiki_url})\n\n---\n"
+    
+    # Web Search section (NEW!)
+    if want_web or want_all:
+        response += "\n🔍 **Web Search Results:**\n"
+        for r in web_results[:3]:
+            title = r.get('title', 'No title')[:50]
+            snippet = r.get('snippet', '')[:100]
+            url = r.get('url', '')
+            response += f"• **{title}**\n"
+            response += f"  {snippet}...\n"
+            response += f"  🔗 {url}\n\n"
+        if not web_results:
+            response += "• No web results found. Try: `search for [topic]`\n"
+        response += "---\n"
     
     # GitHub section
     if want_github or want_all:
