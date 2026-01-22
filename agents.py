@@ -1,14 +1,26 @@
 """
 AI Learning Assistant - Agent Definitions (v2)
 12 specialized agents for comprehensive learning support.
+
+INTERVIEW TIP: This module demonstrates "thinking indicators" - 
+showing users what the AI is doing while processing their request.
+This improves UX by providing transparency into AI reasoning.
 """
 
 import os
 import json
 import asyncio
+import time
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+# Rich library for beautiful console output with thinking animations
+from rich.console import Console
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.panel import Panel
+from rich.text import Text
 
 try:
     from .state import LearningState, DayPlan, QuizQuestion, VALID_ACTIONS
@@ -22,6 +34,82 @@ except ImportError:
     from services.github_service import GitHubService
 
 load_dotenv()
+
+# Global console for thinking indicators
+console = Console()
+
+
+# ============================================================
+# Thinking Indicator Utility
+# ============================================================
+
+class ThinkingIndicator:
+    """
+    Shows animated thinking process to users.
+    
+    INTERVIEW TIP: This provides transparency into AI reasoning,
+    improving user trust and perceived responsiveness.
+    """
+    
+    def __init__(self, initial_thought: str = "Processing..."):
+        self.thoughts = []
+        self.live = None
+        self.initial_thought = initial_thought
+    
+    def __enter__(self):
+        """Start the thinking display."""
+        self.live = Live(
+            self._render(),
+            console=console,
+            refresh_per_second=10,
+            transient=True  # Disappears after completion
+        )
+        self.live.__enter__()
+        return self
+    
+    def __exit__(self, *args):
+        """Stop the thinking display."""
+        if self.live:
+            self.live.__exit__(*args)
+    
+    def think(self, thought: str):
+        """Add a new thought to display."""
+        self.thoughts.append(thought)
+        if self.live:
+            self.live.update(self._render())
+        time.sleep(0.3)  # Brief pause for readability
+    
+    def _render(self):
+        """Render current thoughts with spinner."""
+        text = Text()
+        text.append("🤔 ", style="bold yellow")
+        text.append("AI is thinking...\n", style="bold cyan")
+        
+        for thought in self.thoughts:
+            text.append(f"   💭 {thought}\n", style="dim")
+        
+        if not self.thoughts:
+            text.append(f"   💭 {self.initial_thought}\n", style="dim")
+        
+        return Panel(text, border_style="cyan", padding=(0, 1))
+
+
+def show_thinking(thoughts: list, final_action: str = None):
+    """
+    Display thinking process without Live context (simpler version).
+    
+    INTERVIEW TIP: This function shows step-by-step AI reasoning,
+    making the system feel more intelligent and transparent.
+    """
+    console.print("\n🤔 [bold cyan]AI is thinking...[/bold cyan]")
+    
+    for thought in thoughts:
+        time.sleep(0.2)
+        console.print(f"   💭 [dim]{thought}[/dim]")
+    
+    if final_action:
+        time.sleep(0.2)
+        console.print(f"   ✅ [bold green]Action: {final_action}[/bold green]\n")
 
 
 # ============================================================
@@ -116,14 +204,32 @@ def router_agent(state: LearningState) -> dict:
     
     # Check for exact or partial match
     if user_lower in quick_match:
+        # Show quick thinking for matched commands
+        show_thinking(
+            [f"Received: '{user_input}'", "Matched to quick command"],
+            quick_match[user_lower]
+        )
         return {"next_action": quick_match[user_lower]}
     
     # Check if input starts with a quick command
     for keyword, action in quick_match.items():
         if user_lower.startswith(keyword) or keyword.startswith(user_lower):
+            show_thinking(
+                [f"Received: '{user_input}'", f"Partial match: '{keyword}'"],
+                action
+            )
             return {"next_action": action}
     
     # ===== TIER 2: LLM classification for complex inputs =====
+    # Show thinking for LLM classification
+    show_thinking(
+        [
+            f"Received: '{user_input}'",
+            "No quick match found",
+            "Using LLM for intent classification...",
+        ]
+    )
+    
     llm = get_llm(temperature=0)
     
     # Classification prompt
@@ -191,6 +297,9 @@ IMPORTANT:
         else:
             action = "unknown"
     
+    # Show final classification
+    console.print(f"   ✅ [bold green]Classified as: {action}[/bold green]\n")
+    
     return {"next_action": action}
 
 
@@ -231,6 +340,14 @@ def curriculum_agent(state: LearningState) -> dict:
         # Sanity check: keep between 1-30 days
         if 1 <= extracted_duration <= 30:
             duration = extracted_duration
+    
+    # Show thinking process
+    show_thinking([
+        f"User wants to learn: {topic}",
+        f"Duration requested: {duration} days",
+        f"Skill level: {state.get('skill_level', 'beginner')}",
+        "Generating personalized curriculum...",
+    ])
     
     level = state.get("skill_level", "beginner")
     
@@ -400,6 +517,14 @@ def todo_agent(state: LearningState) -> dict:
         }
     
     topics = current_day_plan.get("topics", [])
+    
+    # Show thinking process
+    show_thinking([
+        f"Fetching tasks for Day {current_day}",
+        f"Today's focus: {current_day_plan['title']}",
+        f"Topics: {', '.join(topics[:3])}{'...' if len(topics) > 3 else ''}",
+        "Generating actionable tasks...",
+    ])
     
     system_prompt = f"""Generate a detailed task list for a {level} learner.
 Topic: {topic}
@@ -713,6 +838,14 @@ def quiz_agent(state: LearningState) -> dict:
     if not quiz_topics:
         quiz_topics = [topic]
     
+    # Show thinking process
+    show_thinking([
+        f"Preparing quiz for Day {current_day}",
+        f"Skill level: {level}",
+        f"Topics covered: {', '.join(quiz_topics[-3:])}",
+        "Generating challenging questions...",
+    ])
+    
     system_prompt = f"""Create a 5-question multiple choice quiz for a {level} learner.
 
 Topics: {', '.join(quiz_topics[-6:])}  # Last 6 topics for relevance
@@ -907,6 +1040,20 @@ def resources_agent(state: LearningState) -> dict:
     else:
         search_query = topic
         display_topic = topic.title() if topic else "Programming"
+    
+    # Show thinking process
+    thinking_items = [f"Searching for: {display_topic}"]
+    if want_all:
+        thinking_items.extend(["Fetching YouTube videos...", "Searching Wikipedia...", "Finding GitHub repos..."])
+    else:
+        if want_youtube:
+            thinking_items.append("Fetching YouTube videos...")
+        if want_wikipedia:
+            thinking_items.append("Searching Wikipedia...")
+        if want_github:
+            thinking_items.append("Finding GitHub repos...")
+    
+    show_thinking(thinking_items)
     
     # Fetch from services based on what user wants
     youtube = YouTubeService()
