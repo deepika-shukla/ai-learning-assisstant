@@ -195,13 +195,31 @@ def router_agent(state: LearningState) -> dict:
         "show analytics": "show_analytics",
         "statistics": "show_analytics",
         
-        # Confirm variations
+        # Confirm variations (YES)
         "yes": "confirm_curriculum",
         "confirm": "confirm_curriculum",
         "approve": "confirm_curriculum",
         "looks good": "confirm_curriculum",
         "let's start": "confirm_curriculum",
         "lets start": "confirm_curriculum",
+        "ok": "confirm_curriculum",
+        "okay": "confirm_curriculum",
+        "sure": "confirm_curriculum",
+        "sounds good": "confirm_curriculum",
+        "perfect": "confirm_curriculum",
+        "great": "confirm_curriculum",
+        
+        # Reject/Modify variations (NO) - Also routes to confirm agent
+        "no": "confirm_curriculum",
+        "nope": "confirm_curriculum",
+        "change": "confirm_curriculum",
+        "modify": "confirm_curriculum",
+        "different": "confirm_curriculum",
+        "not good": "confirm_curriculum",
+        "don't like": "confirm_curriculum",
+        "change it": "confirm_curriculum",
+        "redo": "confirm_curriculum",
+        "try again": "confirm_curriculum",
     }
     
     # Check for exact or partial match
